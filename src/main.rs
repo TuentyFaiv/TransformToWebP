@@ -1,21 +1,68 @@
 extern crate tera;
+extern crate reqwest;
 
+use actix_web::body::MessageBody;
 use dotenvy::dotenv;
+use reqwest::Client;
+use serde_json::{Value};
+use std::collections::HashMap;
 use std::env;
+// use reqwest::blocking;
 
 use actix_web::{post, get, web, App, middleware};
 use actix_web::{HttpServer, HttpResponse, Responder};
 use tera::{Tera, Context};
 
+struct AppState {
+	tera: Tera,
+	curl: Client
+}
+
 #[get("/")]
-async fn home(html: web::Data<Tera>) -> impl Responder {
+async fn home(state: web::Data<AppState>) -> impl Responder {
 	let mut ctx = Context::new();
 
-	let page = html.render("index.html", &mut ctx).unwrap();
+	let page = state.tera.render("index.html", &mut ctx).unwrap();
 
 	HttpResponse::Ok()
 		.content_type("text/html")
 		.body(page)
+}
+
+#[get("/reqwest")]
+async fn req(state: web::Data<AppState>) -> impl Responder {
+
+	// let resp = state.curl
+	// 	.get("https://rickandmortyapi.com/api")
+	// 	.send()
+	// 	.await
+	// 	.json::<HashMap<String, String>>()
+	// 	.await;
+
+	let result = async {
+		state.curl
+			.get("https://rickandmortyapi.com/api")
+			.send()
+			.await?
+			// .error_for_status()?
+			.json::<Value>()
+			.await
+	}.await;
+
+	println!("DATA: {:?}", result);
+
+	HttpResponse::Ok().body(result)
+	// match result {
+	// 	Ok(data) => {
+	// 		HttpResponse::Ok()
+	// 			.content_type("application/json")
+	// 			.body(data)
+	// 	},
+	// 	Err(err) => {
+	// 		HttpResponse::InternalServerError()
+	// 			.body(err.to_string())
+	// 	}
+	// }
 }
 
 // #[post("/transform")]
@@ -51,11 +98,18 @@ async fn main() -> std::io::Result<()> {
 	HttpServer::new(move || {
 		let templates = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/**/*");
 		let tera = Tera::new(templates).unwrap();
+		let curl = Client::new();
+
+		let state = AppState {
+			tera,
+			curl
+		};
 
 		App::new()
 			.wrap(middleware::Logger::default())
 			.service(home)
-			.app_data(web::Data::new(tera))
+			.service(req)
+			.app_data(web::Data::new(state))
 	})
 		.bind(("0.0.0.0", 5000))
 		.unwrap()
