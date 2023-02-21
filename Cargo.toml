@@ -13,9 +13,11 @@ dotenvy = "0.15.6"
 futures = "0.3.26"
 futures-util = "0.3.26"
 json = "0.12.4"
-reqwest = { version = "0.11.14", features = ["json"] }
+reqwest = { version = "0.11.14", features = ["json", "stream"] }
 sanitize-filename = "0.4.0"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
 tera = "1.17.1"
+tokio = "1.25.0"
+tokio-util = { version = "0.7.7", features = ["codec"] }
 uuid = { version = "1.3.0", features = ["v4"] }

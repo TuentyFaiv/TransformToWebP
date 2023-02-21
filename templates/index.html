@@ -8,7 +8,20 @@
 </head>
 <body>
   <main>
-    Hello world
+    <section>
+      <form
+        id="form-transform"
+        action="/transform"
+        method="post"
+        enctype="multipart/form-data"
+      >
+        <label for="file">
+          <p>Choose file</p>
+          <input type="file" name="file" id="file" accept="image/png, image/jpeg" />
+        </label>
+        <button type="submit">Convert image</button>
+      </form>
+    </section>
   </main>
 </body>
 </html>

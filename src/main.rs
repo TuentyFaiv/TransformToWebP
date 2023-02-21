@@ -5,24 +5,59 @@ extern crate serde_json;
 
 use std::io::Write;
 use dotenvy::dotenv;
-use futures::TryStreamExt;
+use futures::stream::TryStreamExt;
+use tokio::io::AsyncWriteExt;
 use std::{env, fs};
 
-use reqwest::{Client};
-use reqwest::header::{HeaderMap, CONTENT_TYPE, AUTHORIZATION};
+use tokio::fs::File;
+use tokio_util::codec::{BytesCodec, FramedRead};
+use reqwest::{Client, Body};
+use reqwest::header::{HeaderMap, CONTENT_TYPE, AUTHORIZATION, ACCEPT};
 use actix_web::{post, get, web, App, middleware};
 use actix_web::{HttpServer, HttpResponse, Responder, Error};
 use actix_multipart::Multipart;
 use tera::{Tera, Context};
-use serde_json::{Value};
 
+use serde::{Serialize, Deserialize};
+use serde_json::{Value, json};
 use uuid::Uuid;
 use sanitize_filename::sanitize;
 use base64::{Engine as _, engine::{general_purpose}};
 
+struct EnvVars {
+	tiny_key: String
+}
+
 struct AppState {
 	html: Tera,
-	curl: Client
+	curl: Client,
+	envs: EnvVars
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SuccessInput {
+	size: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SuccessOutput {
+	url: String,
+	size: usize,
+	width: usize,
+	height: usize,
+	ratio: f64
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Success {
+	input: SuccessInput,
+	output: SuccessOutput
+}
+
+fn file_to_body(file: File) -> Body {
+	let stream = FramedRead::new(file, BytesCodec::new());
+	let body = Body::wrap_stream(stream);
+	body
 }
 
 #[get("/")]
@@ -67,13 +102,13 @@ async fn create_webp(
 ) -> Result<HttpResponse, Error> {
 	// iterate over multipart stream
 
-	let mut file_base64 = String::new();
+	let mut filename = String::new();
 
 	while let Some(mut field) = payload.try_next().await? {
 		// A multipart/form-data stream has to contain `content_disposition`
 		let content_disposition = field.content_disposition();
 
-		let filename = content_disposition
+		filename = content_disposition
 			.get_filename()
 			.map_or_else(|| Uuid::new_v4().to_string(), sanitize);
 
@@ -88,39 +123,110 @@ async fn create_webp(
 			// filesystem operations are blocking, we have to use threadpool
 			f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
 		}
-
-		let file_vec = fs::read(format!("./tmp/{filename}"))
-			.expect("Error to read file");
-
-		file_base64 = general_purpose::STANDARD.encode(file_vec);
 	}
+	
+	let file = File::open(format!("./tmp/{filename}")).await?;
 
-	// println!("File base 64: {:?}", file_base64);
-
+	let key = state.envs.tiny_key.clone();
 	let auth_key = general_purpose::STANDARD
-		.encode(format!("api:8FJ7Jjrm06d7gSYdJGp0FbnkGhQfgPLY"));
+	.encode(format!("api:{key}"));
 
-	let mut heads = HeaderMap::new();
+	let mut header_compress = HeaderMap::new();
 
-	heads.insert(CONTENT_TYPE, "application/octet-stream".parse().unwrap());
-	heads.insert(AUTHORIZATION, format!("Basic {auth_key}").parse().unwrap());
+	header_compress.insert(ACCEPT, "*/*".parse().unwrap());
+	header_compress.insert(AUTHORIZATION, format!("Basic {auth_key}").parse().unwrap());
+	header_compress.insert(CONTENT_TYPE, "application/octet-stream".parse().unwrap());
 
 	let result = async {
 		state.curl.post("https://api.tinify.com/shrink")
-			.headers(heads)
-			.body(file_base64)
+			.headers(header_compress)
+			.body(file_to_body(file))
 			.send()
 			.await?
 			.error_for_status()?
-			.json::<Value>()
+			.json::<Success>()
 			.await
 	}.await;
 
-	println!("Request: {:?}", result);
+	println!("REQUEST: \n\n{:?}\n\n", result);
+
+	fs::remove_file(format!("./tmp/{filename}"))
+		.expect(format!("Error to delete file: ./tmp/{filename}").as_str());
 
 	match result {
 		Ok(data) => {
-			Ok(HttpResponse::Ok().json(data))
+			let mut headers_convert = HeaderMap::new();
+
+			headers_convert.insert(ACCEPT, "*/*".parse().unwrap());
+			headers_convert.insert(AUTHORIZATION, format!("Basic {auth_key}").parse().unwrap());
+			headers_convert.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+
+			let body_json = json!({
+				"convert": { "type": "image/webp" }
+			});
+
+			let convert = async {
+				state.curl.get(data.output.url)
+					.headers(headers_convert)
+					.json(&body_json)
+					.send()
+					.await?
+					.error_for_status()
+			}.await;
+
+			let convertion = match convert {
+				Ok(res_convert) => {
+					
+					let headers_res = res_convert.headers().clone();
+
+					let length = res_convert.content_length().unwrap();
+					let content = headers_res.get("content-type").unwrap().to_str().unwrap();
+					let date = headers_res.get("date").unwrap().to_str().unwrap();
+					let connection = headers_res.get("connection").unwrap().to_str().unwrap();
+					let width = headers_res.get("image-width").unwrap().to_str().unwrap();
+					let height = headers_res.get("image-height").unwrap().to_str().unwrap();
+					let count = headers_res.get("compression-count").unwrap().to_str().unwrap();
+
+					let bytes = res_convert.bytes().await.unwrap();
+
+					let path_saved = "./tmp/compressed_image.webp";
+
+					let mut file_res = File::create(path_saved).await?;
+
+					file_res.write(&bytes).await?;
+
+					let image_content = web::block(move || {
+						fs::read(path_saved).unwrap()
+					}).await?;
+
+					let log_image = json!({
+						"length": length,
+						"type": content,
+						"width": width,
+						"height": height
+					});
+
+					println!("IMAGE_DATA: \n\n{:?}\n\n", log_image);
+
+					Ok(
+						HttpResponse::Ok()
+							.content_type(content)
+							.insert_header(("date", date))
+							.insert_header(("content-length", length))
+							.insert_header(("connection", connection))
+							.insert_header(("image-width", width))
+							.insert_header(("image-height", height))
+							.insert_header(("compression-count", count))
+							.body(image_content)
+					)
+				},
+				Err(err_convert) => {
+					Ok(HttpResponse::InternalServerError()
+						.body(err_convert.to_string()))
+				}
+			};
+			
+			return convertion;
 		},
 		Err(err) => {
 			Ok(HttpResponse::InternalServerError()
@@ -140,9 +246,12 @@ async fn main() -> std::io::Result<()> {
 		let html = Tera::new(templates).unwrap();
 		let curl = Client::new();
 
+		let tiny_key = env::var("TINY_KEY").expect("TINY Key variable not found");
+
 		let state = AppState {
 			html,
-			curl
+			curl,
+			envs: EnvVars { tiny_key }
 		};
 
 		App::new()
