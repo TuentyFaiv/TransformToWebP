@@ -234,7 +234,7 @@
       >
         <label for="file">
           <p>Choose file</p>
-          <input type="file" name="file" id="file" accept="image/png, image/jpeg" required />
+          <input type="file" name="image" id="file" accept="image/png, image/jpeg" required />
         </label>
         <button type="submit">Convert</button>
       </form>
@@ -253,6 +253,7 @@
         const { target: element } = event;
   
         const data = new FormData(element);
+        data.append("tiny_key", "fBnFBR0KflyxvQDzb4NXtrDB8s3f4pG6");
 
         const request = await fetch("/transform", {
           method: "POST",
