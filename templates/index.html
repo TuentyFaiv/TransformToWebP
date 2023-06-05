@@ -255,6 +255,10 @@
         const data = new FormData(element);
         data.append("tiny_key", "fBnFBR0KflyxvQDzb4NXtrDB8s3f4pG6");
 
+        let filename = data.get("image").name;
+        const ext = filename.split(".").pop();
+        filename = filename.replace(`.${ext}`, ".webp");
+
         const request = await fetch("/transform", {
           method: "POST",
           body: data
@@ -265,7 +269,7 @@
 
         const a = document.createElement("a");
         a.href = link;
-        a.download = "convert.webp";
+        a.download = filename;
 
         section.appendChild(a);
         a.click();
@@ -276,7 +280,6 @@
     }
 
     form.addEventListener("submit", transform);
-
   </script>
 </body>
 </html>

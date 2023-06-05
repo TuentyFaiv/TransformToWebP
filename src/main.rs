@@ -1,53 +1,20 @@
-extern crate tera;
-extern crate reqwest;
-extern crate actix_web;
-extern crate actix_cors;
-extern crate serde_json;
+mod infrastructure;
 
 use std::collections::HashMap;
 use std::env;
 use dotenvy::dotenv;
+use env_logger::Env;
 use futures::TryStreamExt;
 use futures::stream::StreamExt;
 use reqwest::Client;
-use reqwest::header::{HeaderMap, CONTENT_TYPE, AUTHORIZATION, ACCEPT};
 use actix_cors::Cors;
-use actix_web::{post, get, web, App, middleware};
-use actix_web::{HttpServer, HttpResponse, Responder};
+use actix_web::{post, get, web, middleware};
+use actix_web::{HttpResponse, Responder};
 use actix_multipart::Multipart;
 use tera::{Tera, Context};
-use serde::{Serialize, Deserialize};
 use serde_json::{Value, json};
-use base64::{Engine as _};
-use base64::engine::general_purpose::STANDARD;
 
-// struct EnvVars {
-// }
-
-struct AppState {
-	html: Tera,
-	curl: Client,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct SuccessInput {
-	size: usize,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct SuccessOutput {
-	url: String,
-	size: usize,
-	width: usize,
-	height: usize,
-	ratio: f64
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Success {
-	input: SuccessInput,
-	output: SuccessOutput
-}
+use crate::infrastructure::models::state::AppState;
 
 #[get("/")]
 async fn home(state: web::Data<AppState>) -> impl Responder {
@@ -79,10 +46,7 @@ async fn req(state: web::Data<AppState>) -> impl Responder {
 }
 
 #[post("/transform")]
-async fn create_webp(
-	state: web::Data<AppState>,
-	mut payload: Multipart,
-) -> impl Responder {
+async fn create_webp(state: web::Data<AppState>, mut payload: Multipart) -> impl Responder {
 	let mut data: HashMap<String, Vec<u8>> = HashMap::new();
 
 	while let Ok(Some(mut field)) = payload.try_next().await {
@@ -99,113 +63,80 @@ async fn create_webp(
 
 	let file_bytes = data.get("image").unwrap().clone();
 	let key = String::from_utf8(data.get("tiny_key").unwrap().clone()).unwrap();
-	let auth_key = STANDARD.encode(format!("api:{key}"));
 
-	let mut header_compress = HeaderMap::new();
+	let mut tiny = state.tiny.clone();
+	tiny.set_key(key);
 
-	header_compress.insert(ACCEPT, "*/*".parse().unwrap());
-	header_compress.insert(AUTHORIZATION, format!("Basic {auth_key}").parse().unwrap());
-	header_compress.insert(CONTENT_TYPE, "application/octet-stream".parse().unwrap());
-
-	let result = async {
-		state.curl.post("https://api.tinify.com/shrink")
-			.headers(header_compress)
-			.body(file_bytes)
-			.send()
-			.await?
-			.error_for_status()?
-			.json::<Success>()
-			.await
-	}.await;
+	let result = tiny.compress(file_bytes).await;
 
 	println!("TO_COMPRESS: \n\n{:?}\n\n", result);
 
 	match result {
-		Ok(data) => {
-			let mut headers_convert = HeaderMap::new();
+		Ok(data) => match tiny.convert(data.output.url).await {
+			Ok(response) => {
+				let headers = response.headers().clone();
 
-			headers_convert.insert(ACCEPT, "*/*".parse().unwrap());
-			headers_convert.insert(AUTHORIZATION, format!("Basic {auth_key}").parse().unwrap());
-			headers_convert.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+				let length = response.content_length().unwrap();
+				let content = headers.get("content-type").unwrap();
+				let date = headers.get("date").unwrap();
+				let connection = headers.get("connection").unwrap();
+				let width = headers.get("image-width").unwrap();
+				let height = headers.get("image-height").unwrap();
+				let count = headers.get("compression-count").unwrap();
 
-			let body_json = json!({ "convert": { "type": "image/webp" } });
+				let image = response.bytes().await.unwrap().to_vec();
 
-			let convert = async {
-				state.curl.get(data.output.url)
-					.headers(headers_convert)
-					.json(&body_json)
-					.send()
-					.await?
-					.error_for_status()
-			}.await;
+				let log_image = json!({
+					"length": length,
+					"type": content.to_str().unwrap(),
+					"width": width.to_str().unwrap(),
+					"height": height.to_str().unwrap(),
+				});
 
-			match convert {
-				Ok(response) => {
-					
-					let headers_res = response.headers().clone();
+				println!("COMPRESSED: \n\n{:?}\n\n", log_image);
 
-					let length = response.content_length().unwrap();
-					let content = headers_res.get("content-type").unwrap().to_str().unwrap();
-					let date = headers_res.get("date").unwrap().to_str().unwrap();
-					let connection = headers_res.get("connection").unwrap().to_str().unwrap();
-					let width = headers_res.get("image-width").unwrap().to_str().unwrap();
-					let height = headers_res.get("image-height").unwrap().to_str().unwrap();
-					let count = headers_res.get("compression-count").unwrap().to_str().unwrap();
-
-					let image = response.bytes().await.unwrap().to_vec();
-
-					let log_image = json!({
-						"length": length,
-						"type": content,
-						"width": width,
-						"height": height
-					});
-
-					println!("COMPRESSED: \n\n{:?}\n\n", log_image);
-
-					HttpResponse::Ok()
-						.content_type(content)
-						.insert_header(("date", date))
-						.insert_header(("content-length", length))
-						.insert_header(("connection", connection))
-						.insert_header(("image-width", width))
-						.insert_header(("image-height", height))
-						.insert_header(("compression-count", count))
-						.body(image)
-				},
-				Err(err) => {
-					HttpResponse::InternalServerError().body(err.to_string())
-				}
-			}
+				HttpResponse::Ok()
+					.content_type(content)
+					.insert_header(("date", date))
+					.insert_header(("content-length", length))
+					.insert_header(("connection", connection))
+					.insert_header(("image-width", width))
+					.insert_header(("image-height", height))
+					.insert_header(("compression-count", count))
+					.body(image)
+			},
+			Err(err) => HttpResponse::InternalServerError().body(err.to_string())
 		},
-		Err(err) => {
-			HttpResponse::InternalServerError().body(err.to_string())
-		}
+		Err(err) => HttpResponse::InternalServerError().body(err.to_string())
 	}
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+	use actix_web::{App, HttpServer};
 	dotenv().ok();
 	env::set_var("RUST_LOG", "info");
 
-	let port = env::var("PORT").expect("PORT must be set").parse::<u16>().unwrap();
+	env_logger::init_from_env(Env::default().default_filter_or("info"));
+
+	let port = env::var("PORT")
+		.unwrap_or_else(|_| "5000".to_string())
+		.parse::<u16>()
+		.expect("PORT must be a number");
 
 	HttpServer::new(move || {
 		let templates = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/**/*");
 		let html = Tera::new(templates).unwrap();
 		let curl = Client::new();
 
-		let state = AppState {
-			html,
-			curl,
-		};
+		let state = AppState::new(html, curl);
 
 		let cors = Cors::permissive();
 
 		App::new()
 			.wrap(cors)
 			.wrap(middleware::Logger::default())
+			.wrap(middleware::Logger::new("%a %{User-Agent}i"))
 			.service(home)
 			.service(create_webp)
 			.service(req)
