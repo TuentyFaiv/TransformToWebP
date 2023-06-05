@@ -189,6 +189,8 @@ async fn main() -> std::io::Result<()> {
 	dotenv().ok();
 	env::set_var("RUST_LOG", "info");
 
+	let port = env::var("PORT").expect("PORT must be set").parse::<u16>().unwrap();
+
 	HttpServer::new(move || {
 		let templates = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/**/*");
 		let html = Tera::new(templates).unwrap();
@@ -209,7 +211,7 @@ async fn main() -> std::io::Result<()> {
 			.service(req)
 			.app_data(web::Data::new(state))
 	})
-		.bind(("0.0.0.0", 5000))?
+		.bind(("0.0.0.0", port))?
 		.run()
 		.await
 }
