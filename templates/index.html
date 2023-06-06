@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -16,8 +17,21 @@
       box-sizing: border-box;
     }
     :root {
-      --primary-color: cyan;
+      --primary-color: #961E1E;
+      --secondary-color: #5A1E96;
+      --secondary-color-acrylic: #5a1e9692;
+      --text-white: #ffffff;
+      --bg: #ffffff;
+      --bg-acrylic: #2e3642aa;
+      --bg-content: #ffffff;
       --font-roboto: "Roboto", sans-serif;
+    }
+    :root[data-theme="dark"] {
+      --primary-color: #21C08B;
+      --text-white: #111111;
+      --bg: #222831;
+      --bg-two: #39414D;
+      --bg-content: #2E3642;
     }
 
     html {
@@ -26,7 +40,10 @@
     }
 
     body {
+      position: relative;
       font-size: 1.6rem;
+      text-align: center;
+      z-index: 0;
     }
 
     main {
@@ -38,224 +55,480 @@
       z-index: 0;
     }
 
-    #loading {
-      position: fixed;
-      display: none;
-      width: 100%;
-      height: 100vh;
-      background-color: rgba(0, 0, 0, .5);
-      backdrop-filter: blur(10px);
-      inset: 0;
-      z-index: 0;
-    }
-    #loading.show {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
     #content {
       width: 100%;
     }
 
-    #form-transform {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      gap: 25px;
+    .settings {
+      position: absolute;
+      width: 120px;
+      padding: 5px 15px;
+      background-color: var(--primary-color);
+      color: var(--text-white);
+      font-size: 1.2rem;
+      font-weight: 500;
+      border-radius: 15px;
+      top: 2%;
+      right: 2%;
+      z-index: 12;
+    }
+    .settings:hover {
+      cursor: pointer;
     }
 
-    h1 {
+    .title {
       width: max-content;
       margin: 0 auto 30px;
-      font-size: 3rem;
+      font-size: 2.5rem;
       font-weight: 700;
       text-transform: uppercase;
     }
 
-    label,
-    button {
+    .form {
+      display: flex;
+      width: 100%;
+      max-width: 400px;
+      padding: 0 1rem;
+      margin: 0 auto;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .form__config-overlay {
+      position: fixed;
+      display: none;
+      width: 100%;
+      min-height: 100vh;
+      background-color: var(--bg-acrylic);
+      backdrop-filter: blur(10px);
+      justify-content: center;
+      align-items: center;
+      inset: 0;
+      z-index: 10;
+    }
+
+    .form__config-overlay.show {
+      display: flex;
+    }
+
+    .form__config {
+      width: 100%;
+      max-width: 400px;
+      background-color: var(--bg);
+      border-radius: 10px;
+      padding: 15px;
+    }
+
+    .form__config p {
+      margin-bottom: 15px;
+    }
+
+    .form__config input {
       display: block;
       width: 100%;
-      max-width: 320px;
-    }
-    label p,
-    button {
-      transition: all .5s ease;
-      will-change: auto;
-    }
-    label p:hover,
-    button:hover {
-      cursor: pointer;
+      padding: 5px 10px;
+      border: 1px solid var(--secondary-color);
+      border-radius: 5px;
+      font-size: 1.2rem;
+      font-weight: 500;
     }
 
-    label p {
-      padding: 5px 20px;
-      margin: 0 auto;
-      background-color: #4D455D;
-      color: #FFFFFF;
-      font-size: 2rem;
-      text-align: center;
-      border-radius: 4px;
-    }
-    label p:hover {
-      box-shadow: 0 0 10px rgba(70, 63, 85, .65);
+    .form__drop {
+      position: relative;
+      display: flex;
+      width: 100%;
+      min-height: 100px;
+      max-height: 600px;
+      padding: 5px;
+      border: 1px solid var(--secondary-color);
+      border-radius: 10px;
+      justify-content: center;
+      align-items: center;
+      z-index: 0;
     }
 
-    label input {
+    .form__drop p {
+      height: max-content;
+      font-size: 1.2rem;
+      font-weight: 500;
+    }
+
+    .form__drop p.hide {
       display: none;
     }
 
-    button {
-      padding: 5px 20px;
-      background-color: #7DB9B6;
-      color: #FFFFFF;
-      font-size: 2.2rem;
-      text-align: center;
-      text-transform: uppercase;
-      border-radius: 4px;
-    }
-    button:hover {
-      box-shadow: 0 0 15px rgba(125, 185, 182, .85);
+    .form__drop::before {
+      position: absolute;
+      display: none;
+      content: "";
+      width: calc(100% - 10px);
+      height: calc(100% - 10px);
+      background-color: var(--secondary-color-acrylic);
+      border-radius: 5px;
+      z-index: -1;
     }
 
-    .spin {
-      display: inline-block;
-      position: relative;
-      width: 80px;
-      height: 80px;
-      z-index: 0;
+    .form__drop:has(.withfile) {
+      cursor: initial;
     }
-    .spin div {
+
+    .form__drop:not(.withfile):hover,
+    .form__drop.addfile {
+      cursor: pointer;
+      border: 1px dashed var(--secondary-color);
+    }
+
+    .form__drop:not(.withfile):hover::before,
+    .form__drop.addfile::before {
+      display: block;
+    }
+
+    .form__drop:not(.withfile):hover p,
+    .form__drop.addfile p {
+      color: var(--text-white);
+    }
+
+    .form__cover {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .form__remove {
       position: absolute;
-      width: 6px;
-      height: 6px;
-      background-color: #E96479;
-      border-radius: 50%;
-      animation: loader 1.2s linear infinite;
+      width: 100%;
+      max-width: max-content;
+      padding: 2px 15px;
+      background-color: var(--primary-color);
+      color: var(--text-white);
+      font-size: 1.2rem;
+      font-weight: 500;
+      border-radius: 15px;
+      top: 2px;
+      right: 2px;
       z-index: 0;
     }
-    .spin div:nth-child(1) {
-      animation-delay: 0s;
-      top: 37px;
-      left: 66px;
+
+    .form__remove:hover {
+      cursor: pointer;
     }
-    .spin div:nth-child(2) {
-      animation-delay: -0.1s;
-      top: 22px;
-      left: 62px;
+
+    .form__file {
+      display: block;
+      width: 100%;
+      padding: 5px 15px;
+      border: 1px solid var(--secondary-color);
+      border-radius: 20px;
     }
-    .spin div:nth-child(3) {
-      animation-delay: -0.2s;
-      top: 11px;
-      left: 52px;
+
+    .form__file.hide {
+      display: none;
     }
-    .spin div:nth-child(4) {
-      animation-delay: -0.3s;
-      top: 7px;
-      left: 37px;
+
+    .form__file:hover {
+      cursor: pointer;
+      background-color: var(--secondary-color);
+      color: var(--text-white);
     }
-    .spin div:nth-child(5) {
-      animation-delay: -0.4s;
-      top: 11px;
-      left: 22px;
+
+    .form__submit {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-areas: "loader button other";
+      width: 100%;
+      min-height: 42px;
+      margin-top: 15px;
+      padding: 5px 10px;
+      background-color: var(--primary-color);
+      color: #FFFFFF;
+      font-size: 1.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-radius: 45px;
     }
-    .spin div:nth-child(6) {
-      animation-delay: -0.5s;
-      top: 22px;
-      left: 11px;
+    .form__submit span {
+      place-self: center;
+      grid-area: button;
     }
-    .spin div:nth-child(7) {
-      animation-delay: -0.6s;
-      top: 37px;
-      left: 7px;
+
+    .form__submit > svg {
+      display: none;
+      grid-area: loader;
+      width: 32px;
+      height: 32px;
     }
-    .spin div:nth-child(8) {
-      animation-delay: -0.7s;
-      top: 52px;
-      left: 11px;
+
+    .form__submit.show > svg {
+      display: block;
     }
-    .spin div:nth-child(9) {
-      animation-delay: -0.8s;
-      top: 62px;
-      left: 22px;
-    }
-    .spin div:nth-child(10) {
-      animation-delay: -0.9s;
-      top: 66px;
-      left: 37px;
-    }
-    .spin div:nth-child(11) {
-      animation-delay: -1s;
-      top: 62px;
-      left: 52px;
-    }
-    .spin div:nth-child(12) {
-      animation-delay: -1.1s;
-      top: 52px;
-      left: 62px;
-    }
-    @keyframes loader {
-      0%, 20%, 80%, 100% {
-        transform: scale(1);
-      }
-      50% {
-        transform: scale(1.5);
-      }
+
+    .form__submit:hover {
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
   <main>
-    <div id="loading">
-      <div class="spin">
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-      </div>
-    </div>
+    <button id="settings" class="settings">
+      Settings
+    </button>
     <section id="content">
-      <!-- action="/transform"
-      method="post"
-      enctype="multipart/form-data" -->
-      <h1>Convert to webp</h1>
-      <form
-        id="form-transform"
-      >
-        <label for="file">
-          <p>Choose file</p>
-          <input type="file" name="image" id="file" accept="image/png, image/jpeg" required />
+      <h1 class="title">Convert to webp</h1>
+      <form id="form-convert" class="form">
+        <div class="form__config-overlay">
+          <label for="tiny_key" class="form__config">
+            <p>Tiny api key</p>
+            <input type="text" id="tiny_key" name="tiny_key" placeholder="API KEY" />
+          </label>
+        </div>
+        <div id="drop-area" class="form__drop">
+          <p>
+            Drop image
+            <br />
+            or
+          </p>
+        </div>
+        <label id="file-label" for="file" class="form__file">
+          <p>Choose image</p>
+          <input
+            id="file"
+            type="file"
+            name="image"
+            style="display: none;"
+            accept="image/png, image/jpeg"
+          />
         </label>
-        <button type="submit">Convert</button>
+        <button
+          id="submit-convert"
+          type="submit"
+          class="form__submit"
+        >
+          <svg id="loader" class="loader" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+            style="background: none; shape-rendering: auto;" width="360px" height="360px"
+            viewBox="0 0 100 100" preserveAspectRatio="xMidYMid">
+            <g transform="rotate(0 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.9166666666666666s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(30 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.8333333333333334s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(60 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.75s" repeatCount="indefinite">
+                </animate>
+              </rect>
+            </g>
+            <g transform="rotate(90 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.6666666666666666s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(120 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.5833333333333334s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(150 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.5s" repeatCount="indefinite">
+                </animate>
+              </rect>
+            </g>
+            <g transform="rotate(180 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.4166666666666667s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(210 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.3333333333333333s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(240 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.25s" repeatCount="indefinite">
+                </animate>
+              </rect>
+            </g>
+            <g transform="rotate(270 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.16666666666666666s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(300 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="-0.08333333333333333s"
+                  repeatCount="indefinite"></animate>
+              </rect>
+            </g>
+            <g transform="rotate(330 50 50)">
+              <rect x="47" y="24" rx="1.8" ry="1.8" width="6" height="12" fill="#FFFFFF">
+                <animate attributeName="opacity" values="1;0" keyTimes="0;1" dur="1s" begin="0s" repeatCount="indefinite">
+                </animate>
+              </rect>
+            </g>
+            <!-- [ldio] generated by https://loading.io/ -->
+          </svg>
+          <span id="button-text">Convert</span>
+        </button>
       </form>
     </section>
   </main>
 
   <script type="text/javascript">
-    const form = document.querySelector("form#form-transform");
+    const form = document.querySelector("form#form-convert");
+    const drop = document.querySelector("div#drop-area");
     const section = document.querySelector("section#content");
-    const loader = document.querySelector("div#loading");
+    const settings = document.querySelector("button#settings");
+    const label = document.querySelector("label#file-label");
+    const input = document.querySelector("input#file");
+    const apikeyInput = document.querySelector("input#tiny_key");
+    const button = document.querySelector("button#submit-convert");
+    const overlay = document.querySelector("div.form__config-overlay");
+    function loadKey() {
+      const key = localStorage.getItem("tiny_key");
+      if (key) {
+        apikeyInput.value = key;
+      }
+    }
+    window.onload = loadKey;
 
+    let file = null;
+
+    function hideImage() {
+      const dropText = document.querySelector("div#drop-area p");
+      const imgShowed = document.querySelector("img#cover");
+      const removeBtn = document.querySelector("button#remove-image");
+      drop.classList.remove("withfile");
+      dropText.classList.remove("hide");
+      label.classList.remove("hide");
+
+      input.value = "";
+      file = null;
+      drop.removeChild(imgShowed);
+      drop.removeChild(removeBtn);
+    }
+
+    function showImage(image) {
+      const dropText = document.querySelector("div#drop-area p");
+      const url = URL.createObjectURL(image);
+      file = image;
+
+      const img = document.createElement("img");
+      img.id = "cover";
+      img.src = url;
+      img.alt = file.name;
+      img.classList.add("form__cover");
+
+      const remove = document.createElement("button");
+      remove.id = "remove-image";
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.classList.add("form__remove");
+
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        hideImage();
+      });
+
+      dropText.classList.add("hide");
+      drop.append(...[img, remove]);
+      drop.classList.remove("addfile");
+      drop.classList.add("withfile");
+
+      label.classList.add("hide");
+    }
+
+    async function dropFile(event) {
+      event.preventDefault();
+      const items = event.dataTransfer.items;
+
+      if (!items) return;
+      [...items].forEach((item) => {
+        if (items.length === 1 && item.kind === "file") {
+          showImage(item.getAsFile());
+        }
+      });
+    }
+
+    function dragOverHandler(event) {
+      event.preventDefault();
+      if (event.isTrusted) {
+        drop.classList.add("addfile");
+      }
+    }
+
+    function dragLeaveHandler(event) {
+      event.preventDefault();
+      if (event.isTrusted) {
+        drop.classList.remove("addfile");
+      }
+    }
+
+    drop.addEventListener("dragleave", dragLeaveHandler);
+    drop.addEventListener("dragover", dragOverHandler);
+    drop.addEventListener("drop", dropFile);
+    drop.addEventListener("click", () => label.click());
+
+    input.addEventListener("change", (event) => {
+      const { files } = event.target;
+
+      if (files.length === 1) {
+        showImage(files[0]);
+      }
+    });
+
+    apikeyInput.addEventListener("input", (event) => {
+      localStorage.setItem("tiny_key", event.target.value);
+    });
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        overlay.classList.remove("show");
+      }
+    });
+    settings.addEventListener("click", () => {
+      overlay.classList.toggle("show");
+    });
+
+    
     async function transform(event) {
       try {
-        loader.classList.add("show");
         event.preventDefault();
-        const { target: element } = event;
+        button.classList.add("show");
   
-        const data = new FormData(element);
-        data.append("tiny_key", "fBnFBR0KflyxvQDzb4NXtrDB8s3f4pG6");
+        const data = new FormData(event.target);
 
-        let filename = data.get("image").name;
+        const image = data.get("image");
+
+        if (data.get("tiny_key") === "" || !data.has("tiny_key")) {
+          throw new Error("Please set your tiny api key");
+        }
+
+        if (image.size === 0 && file) {
+          data.set("image", file);
+        } else if (image.size === 0 && !file) {
+          data.delete("image");
+          throw new Error("Please select an image");
+        }
+
+        button.setAttribute("disabled", true);
+
+        let filename = image.name;
         const ext = filename.split(".").pop();
         filename = filename.replace(`.${ext}`, ".webp");
 
@@ -274,8 +547,15 @@
         section.appendChild(a);
         a.click();
         section.removeChild(a);
-      } catch (error) {} finally {
-        loader.classList.remove("show");
+        file = null;
+        form.reset();
+        hideImage();
+        loadKey();
+      } catch (error) {
+        swal("Error", error.message,  "error");
+      } finally {
+        button.classList.remove("show");
+        button.removeAttribute("disabled");
       }
     }
 
