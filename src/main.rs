@@ -60,52 +60,49 @@ async fn create_webp(state: web::Data<AppState>, mut payload: Multipart) -> impl
 
 		data.insert(name, data_bytes);
 	}
-
-	let file_bytes = data.get("image").unwrap().clone();
-	let key = String::from_utf8(data.get("tiny_key").unwrap().clone()).unwrap();
-
 	let mut tiny = state.tiny.clone();
-	tiny.set_key(key);
 
-	let result = tiny.compress(file_bytes).await;
+	// let file_bytes = data.get("image").unwrap().clone();
+	// let key = String::from_utf8(data.get("tiny_key").unwrap().clone()).unwrap();
 
-	println!("TO_COMPRESS: \n\n{:?}\n\n", result);
+	// tiny.set_key(key);
 
-	match result {
-		Ok(data) => match tiny.convert(data.output.url).await {
-			Ok(response) => {
-				let headers = response.headers().clone();
+	// let result = tiny.compress(file_bytes).await;
 
-				let length = response.content_length().unwrap();
-				let content = headers.get("content-type").unwrap();
-				let date = headers.get("date").unwrap();
-				let connection = headers.get("connection").unwrap();
-				let width = headers.get("image-width").unwrap();
-				let height = headers.get("image-height").unwrap();
-				let count = headers.get("compression-count").unwrap();
+	// println!("TO_COMPRESS: \n\n{:?}\n\n", result);
 
-				let image = response.bytes().await.unwrap().to_vec();
+	match tiny.convert(data).await {
+		Ok(response) => {
+			let headers = response.headers().clone();
 
-				let log_image = json!({
-					"length": length,
-					"type": content.to_str().unwrap(),
-					"width": width.to_str().unwrap(),
-					"height": height.to_str().unwrap(),
-				});
+			let length = response.content_length().unwrap();
+			let content = headers.get("content-type").unwrap();
+			let date = headers.get("date").unwrap();
+			let connection = headers.get("connection").unwrap();
+			let width = headers.get("image-width").unwrap();
+			let height = headers.get("image-height").unwrap();
+			let count = headers.get("compression-count").unwrap();
 
-				println!("COMPRESSED: \n\n{:?}\n\n", log_image);
+			let image = response.bytes().await.unwrap().to_vec();
 
-				HttpResponse::Ok()
-					.content_type(content)
-					.insert_header(("date", date))
-					.insert_header(("content-length", length))
-					.insert_header(("connection", connection))
-					.insert_header(("image-width", width))
-					.insert_header(("image-height", height))
-					.insert_header(("compression-count", count))
-					.body(image)
-			},
-			Err(err) => HttpResponse::InternalServerError().body(err.to_string())
+			let log_image = json!({
+				"length": length,
+				"type": content.to_str().unwrap(),
+				"width": width.to_str().unwrap(),
+				"height": height.to_str().unwrap(),
+			});
+
+			println!("COMPRESSED: \n\n{:?}\n\n", log_image);
+
+			HttpResponse::Ok()
+				.content_type(content)
+				.insert_header(("date", date))
+				.insert_header(("content-length", length))
+				.insert_header(("connection", connection))
+				.insert_header(("image-width", width))
+				.insert_header(("image-height", height))
+				.insert_header(("compression-count", count))
+				.body(image)
 		},
 		Err(err) => HttpResponse::InternalServerError().body(err.to_string())
 	}

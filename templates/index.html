@@ -301,6 +301,14 @@
             accept="image/png, image/jpeg"
           />
         </label>
+        <label for="type" id="file-format" class="form__file">
+          <p>File type</p>
+          <select name="type" id="type">
+            <option value="image/webp" default>WEBP</option>
+            <option value="image/png">PNG</option>
+            <option value="image/jpeg">JPEG</option>
+          </select>
+        </label>
         <button
           id="submit-convert"
           type="submit"
@@ -514,6 +522,7 @@
         const data = new FormData(event.target);
 
         const image = data.get("image");
+        const type = data.get("type");
 
         if (data.get("tiny_key") === "" || !data.has("tiny_key")) {
           throw new Error("Please set your tiny api key");
@@ -530,7 +539,7 @@
 
         let filename = image.name;
         const ext = filename.split(".").pop();
-        filename = filename.replace(`.${ext}`, ".webp");
+        filename = filename.replace(`.${ext}`, `.${type.replace("image/", "")}`);
 
         const request = await fetch("/transform", {
           method: "POST",
